@@ -41,12 +41,12 @@ class SignatureService extends Client
                 'headers'  => ['Content-Type' => 'application/octet-stream']
             ],
             [
-                'name' => 'files',
+                'name' => 'req',
                 'contents' => json_encode($contents),
                 'headers' => ['Content-Type' => 'application/json;charset=UTF-8']
             ],
         ];
-        
+
         $response = $this->getConnection()->getHttpClient()->request(
             'POST',
             sprintf('%s/card/v1/cards/%s/certificates/signature',
@@ -68,7 +68,7 @@ class SignatureService extends Client
 
         return $this->_parseResponse($response);
     }
-    
+
     /**
      * @param $link
      * @param Token $token
@@ -97,15 +97,16 @@ class SignatureService extends Client
 
         return $this->_parseResponse($response);
     }
-    
+
     public function sign(SigningRequest $signingRequest, Token $token){
         $results = $this->createSignTask($signingRequest, $token);
-        
+
         if (!isset($results['state'])) {
             throw new Exception('Invalid response, missing "state" param');
         }
 
         if ($results['state'] == 'pending' && isset($results['ping-after'])) {
+            usleep((int)$results['ping-after']);
             usleep((int)$results['ping-after']);
         }
 
@@ -114,11 +115,11 @@ class SignatureService extends Client
         }
 
         $results = $this->getTask($results['atom:link'], $token);
-        
+
         if (!isset($results['state'])) {
             throw new Exception('Invalid response, missing "state" param');
         }
-        
+
         if (!isset($results['atom:link'])) {
             throw new Exception('Invalid response, missing "atom:link" param');
         }
@@ -126,13 +127,13 @@ class SignatureService extends Client
         if ($results['state'] == 'pending' && isset($results['ping-after'])) {
             usleep((int)$results['ping-after']);
             usleep((int)$results['ping-after']);
-            
+
             $results = $this->getTask($results['atom:link'], $token);
-            
+
             if (!isset($results['state'])) {
                 throw new Exception('Invalid response, missing "state" param');
             }
-            
+
             if (!isset($results['atom:link'])) {
                 throw new Exception('Invalid response, missing "atom:link" param');
             }
@@ -152,24 +153,12 @@ class SignatureService extends Client
                         $token->getTokenType(),
                         $token->getAccessToken()
                     ),
-                    'Accept' => 'application/xml, application/json'
+                    'Accept' => 'application/json'
                 ],
-                'allow_redirects' => false
             ]
         );
+        $decodedBody = json_decode($response->getBody(), true);
 
-        $contentType=$response->getHeader('Content-Type');
-        if(is_array($contentType)) $contentType=reset($contentType);
-        
-        if($contentType == 'application/xml'){
-            return (string)$response->getBody();
-        }else if($contentType == 'application/json'){
-            $status = $this->_parseResponse($response);
-            if(!empty($status['message'])){
-                throw new Exception(sprintf('Server error: %s',$status['message']));
-            }else{
-                throw new Exception(sprintf('Invalid response content-type: %s',$contentType));
-            }
-        }
+        return $decodedBody;
     }
 }
